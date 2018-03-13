@@ -4,10 +4,10 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-version=`cat package.json | jq -r '.version'`
+version=`cat VERSION`
 
-./build.sh $version
-docker tag "projectriff/node-function-invoker:${version}" "projectriff/node-function-invoker:${version}-ci-${TRAVIS_COMMIT}"
+TAG="${version}" make dockerize
+docker tag "projectriff/go-function-invoker:latest" "projectriff/go-function-invoker:${version}-ci-${TRAVIS_COMMIT}"
 
-docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
-docker push "projectriff/node-function-invoker"
+docker login -u "${DOCKER_USERNAME}" -p "${DOCKER_PASSWORD}"
+docker push "projectriff/go-function-invoker"
