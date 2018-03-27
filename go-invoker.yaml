@@ -9,6 +9,7 @@ spec:
   - "*.so"
   properties:
     handler:
+      default: "{{ .TitleCase .FunctionName }}"
       description: the name of the function handler (name of Exported go function)
     function:
       protocol: grpc
