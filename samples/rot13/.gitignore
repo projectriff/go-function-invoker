@@ -1,0 +1,6 @@
+*
+!.gitignore
+!*.go
+!Dockerfile.plugin-builder
+!Makefile
+!README.*
