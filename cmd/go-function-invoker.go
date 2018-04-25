@@ -47,11 +47,11 @@ func main() {
 	}
 
 	gRpcServer := grpc.NewServer()
-	fnServer, err := server.New(fnUri)
+	invoker, err := server.NewInvoker(fnUri)
 	if err != nil {
 		panic(err)
 	}
-	function.RegisterMessageFunctionServer(gRpcServer, fnServer)
+	function.RegisterMessageFunctionServer(gRpcServer, invoker)
 
 	// Handle shutdown gracefully
 	go func() {

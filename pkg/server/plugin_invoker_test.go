@@ -3,14 +3,23 @@ package server
 import (
 	"runtime"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
-	. "github.com/onsi/gomega"
-	"os/exec"
 	"os"
+	"os/exec"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	"github.com/projectriff/go-function-invoker/pkg/function"
+	"golang.org/x/net/context"
+
 	"fmt"
+	"time"
+
 	"github.com/onsi/gomega/types"
+	"google.golang.org/grpc"
+	"math/rand"
+	"net"
+	"io"
+	"net/http"
 )
 
 const (
@@ -43,139 +52,446 @@ type TestCase struct {
 var _ = Describe("PluginInvoker", func() {
 
 	var (
-		invoker *pluginInvoker
-		handler string
+		invoker    *pluginInvoker
+		handler    string
+		gRpcServer *grpc.Server
+		sidecar    function.MessageFunction_CallClient
+		cancel     context.CancelFunc
 	)
-
-	runTest := func(tc TestCase) {
-		headers := make(map[string]string)
-		if tc.Accept != "" {
-			headers[Accept] = tc.Accept
-		}
-		if tc.ContentType != "" {
-			headers[ContentType] = tc.ContentType
-		}
-		m := &function.Message{Payload: tc.In, Headers: convert(headers)}
-		r := invoker.invoke(m)
-		if tc.Expected != nil {
-			Expect(r.Payload).To(tc.Expected)
-		}
-		if tc.ExpectedError != "" {
-			Expect(r.Headers[Error].GetValues()[0], Equal(tc.ExpectedError))
-		}
-
-	}
 
 	JustBeforeEach(func() {
 		var err error
 
-		invoker, err = newInvoker(fmt.Sprintf("%s?%s=%s", builtPlugin, Handler, handler))
+		invoker, err = NewInvoker(fmt.Sprintf("%s?%s=%s", builtPlugin, Handler, handler))
 		Expect(err).NotTo(HaveOccurred())
+
+		port := 1024 + rand.Intn(65536-1024)
+
+		gRpcServer = grpc.NewServer()
+		listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+		function.RegisterMessageFunctionServer(gRpcServer, invoker)
+		go func() {
+			gRpcServer.Serve(listener)
+		}()
+
+		ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
+		conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%v", port), grpc.WithInsecure(), grpc.WithBlock())
+		Expect(err).NotTo(HaveOccurred())
+
+		ctx, cancel = context.WithCancel(context.Background())
+
+		//sidecar, err = function.NewMessageFunctionClient(conn).Call(context.Background())
+		sidecar, err = function.NewMessageFunctionClient(conn).Call(ctx)
+		Expect(err).NotTo(HaveOccurred())
+
 	})
 
-	Context("with functions that accept a string", func() {
+	AfterEach(func() {
+		gRpcServer.Stop()
+	})
+
+	Context("with 'direct' functions", func() {
 		BeforeEach(func() {
 			handler = "StringInStringOut"
 		})
 
-		DescribeTable("using input Content-Type", runTest,
-			Entry("should support text/plain in", TestCase{
-				ContentType: "text/plain",
-				In:          []byte("world"),
-				Expected:    Equal([]byte("Hello world")),
-			}),
-			Entry("should support application/json in", TestCase{
-				ContentType: "application/json",
-				In:          []byte(`"world"`),
-				Expected:    Equal([]byte("Hello world")),
-			}),
-		)
+		It("should assume input content type is text/plain, accepted output is text/plain", func() {
+			go func() {
+				defer GinkgoRecover()
+				err := sidecar.Send(msg("world"))
+				Expect(err).NotTo(HaveOccurred())
+				err = sidecar.CloseSend()
+				Expect(err).NotTo(HaveOccurred())
+			}()
+
+			result, err := sidecar.Recv()
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(result.Payload).To(Equal([]byte("Hello world")))
+		})
+
+		It("should know how to return text/plain", func() {
+			go func() {
+				defer GinkgoRecover()
+				err := sidecar.Send(msg("world", "Content-Type", "text/plain", "Accept", "text/plain"))
+				Expect(err).NotTo(HaveOccurred())
+				err = sidecar.CloseSend()
+				Expect(err).NotTo(HaveOccurred())
+			}()
+			result, err := sidecar.Recv()
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(result.Payload).To(Equal([]byte("Hello world")))
+		})
+
+		It("should know how to return application/json", func() {
+			go func() {
+				defer GinkgoRecover()
+
+				err := sidecar.Send(msg("world", "Content-Type", "text/plain", "Accept", "application/json"))
+				Expect(err).NotTo(HaveOccurred())
+				err = sidecar.CloseSend()
+				Expect(err).NotTo(HaveOccurred())
+			}()
+
+			result, err := sidecar.Recv()
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(result.Payload).To(Equal([]byte("\"Hello world\"\n")))
+		})
+
+		It("should know how to handle incoming application/json", func() {
+			go func() {
+				defer GinkgoRecover()
+				err := sidecar.Send(msg("\"world\"", "Content-Type", "application/json", "Accept", "text/plain"))
+				Expect(err).NotTo(HaveOccurred())
+				err = sidecar.CloseSend()
+				Expect(err).NotTo(HaveOccurred())
+			}()
+
+			result, err := sidecar.Recv()
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(result.Payload).To(Equal([]byte("Hello world")))
+		})
+
+		It("should cope with Close() in any order", func() {
+			err := sidecar.Send(msg("world", "Content-Type", "text/plain", "Accept", "text/plain"))
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := sidecar.Recv()
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(result.Payload).To(Equal([]byte("Hello world")))
+
+			err = sidecar.CloseSend()
+			Expect(err).NotTo(HaveOccurred())
+			result, err = sidecar.Recv()
+			Expect(err).To(MatchError(io.EOF))
+		})
+
+		It("idiomatic go errors are propagated back", func() {
+			go func() {
+				defer GinkgoRecover()
+				err := sidecar.Send(msg("Riff", "Content-Type", "text/plain", "Accept", "text/plain"))
+				Expect(err).NotTo(HaveOccurred())
+				err = sidecar.CloseSend()
+				Expect(err).NotTo(HaveOccurred())
+			}()
+
+			_, err := sidecar.Recv()
+			Expect(err).To(MatchError(ContainSubstring("error condition")))
+
+		})
+
+		It("unmarshalling errors abort and are propagated", func() {
+			go func() {
+				defer GinkgoRecover()
+				err := sidecar.Send(msg("world", "Content-Type", "text/foobar", "Accept", "text/plain"))
+				Expect(err).NotTo(HaveOccurred())
+			}()
+
+			_, err := sidecar.Recv()
+			Expect(err).To(MatchError(ContainSubstring("Unsupported Content-Type: text/foobar")))
+		})
+
+		It("marshalling errors abort and are propagated", func() {
+			go func() {
+				defer GinkgoRecover()
+				err := sidecar.Send(msg("world", "Content-Type", "text/plain", "Accept", "text/foobar"))
+				Expect(err).NotTo(HaveOccurred())
+			}()
+
+			_, err := sidecar.Recv()
+			Expect(err).To(MatchError(ContainSubstring("unsupported content types: [text/foobar]")))
+		})
 	})
 
-	Context("with functions that emit a string", func() {
+	Context("with 'streaming' functions that accept a string", func() {
 		BeforeEach(func() {
-			handler = "StringInStringOut"
+			handler = "RunLengthEncode"
 		})
 
-		DescribeTable("using output Accept", runTest,
-			Entry("should support text/plain out", TestCase{
-				ContentType: "text/plain",
-				Accept:      "text/plain",
-				In:          []byte("world"),
-				Expected:    Equal([]byte("Hello world")),
-			}),
-			Entry("should support application/json out", TestCase{
-				ContentType: "text/plain",
-				Accept:      "application/json",
-				In:          []byte("world"),
-				Expected:    Equal([]byte("\"Hello world\"\n")),
-			}),
-		)
-	})
+		It("should cope with independent input/output streams", func() {
+			go func() {
+				defer GinkgoRecover()
+				err := sidecar.Send(msg("world", "Content-Type", "text/plain", "Accept", "application/json"))
+				Expect(err).NotTo(HaveOccurred())
+				err = sidecar.Send(msg("world", "Content-Type", "text/plain", "Accept", "application/json"))
+				Expect(err).NotTo(HaveOccurred())
+				err = sidecar.Send(msg("hello", "Content-Type", "text/plain", "Accept", "application/json"))
+				Expect(err).NotTo(HaveOccurred())
+				err = sidecar.Send(msg("world", "Content-Type", "text/plain", "Accept", "application/json"))
+				Expect(err).NotTo(HaveOccurred())
 
-	Context("whatever function that can be invoked", func() {
+				err = sidecar.CloseSend()
+				Expect(err).NotTo(HaveOccurred())
+			}()
+
+			result, err := sidecar.Recv()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Payload).To(Equal([]byte(`{"Word":"world","Count":2}` + "\n")))
+
+			result, err = sidecar.Recv()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Payload).To(Equal([]byte(`{"Word":"hello","Count":1}` + "\n")))
+
+			result, err = sidecar.Recv()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Payload).To(Equal([]byte(`{"Word":"world","Count":1}` + "\n")))
+
+			result, err = sidecar.Recv()
+			Expect(err).To(MatchError(io.EOF))
+		})
+
+		It("should propagate user function errors back", func() {
+			go func() {
+				defer GinkgoRecover()
+				err := sidecar.Send(msg("hello", "Content-Type", "text/plain", "Accept", "application/json"))
+				Expect(err).NotTo(HaveOccurred())
+				err = sidecar.Send(msg("world", "Content-Type", "text/plain", "Accept", "application/json"))
+				Expect(err).NotTo(HaveOccurred())
+				err = sidecar.Send(msg("world", "Content-Type", "text/plain", "Accept", "application/json"))
+				Expect(err).NotTo(HaveOccurred())
+				err = sidecar.Send(msg("world", "Content-Type", "text/plain", "Accept", "application/json"))
+				Expect(err).NotTo(HaveOccurred())
+
+				err = sidecar.CloseSend()
+				Expect(err).NotTo(HaveOccurred())
+			}()
+
+			result, err := sidecar.Recv()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Payload).To(Equal([]byte(`{"Word":"hello","Count":1}` + "\n")))
+
+			result, err = sidecar.Recv()
+			Expect(err).To(MatchError(ContainSubstring("Too many occurrences of world")))
+		})
+
+	})
+	Context("with Supplier-style functions", func() {
 		BeforeEach(func() {
-			handler = "StringInChannelOut"
+			handler = "SupplierFunc"
 		})
 
-		DescribeTable("possible errors are", runTest,
-			Entry("unsupported Content-Type", TestCase{
-				ContentType:   "bogus/focus",
-				In:            []byte("world"),
-				ExpectedError: ContentTypeNotSupported,
-				Expected:      ContainSubstring("bogus/focus"),
-			}),
-			Entry("unsupported Accept", TestCase{
-				ContentType:   "text/plain",
-				Accept:        "idont/havethat",
-				In:            []byte("world"),
-				ExpectedError: AcceptNotSupported,
-			}),
-			Entry("error while unmarshalling input", TestCase{
-				ContentType:   "application/json",
-				In:            []byte("foo"), // foo without quotes is not a json string. It's nothing parseable
-				ExpectedError: ErrorWhileUnmarshalling,
-			}),
-			Entry("error while marshalling result", TestCase{
-				ContentType:   "text/plain",
-				Accept:        "application/json",
-				In:            []byte("world"),
-				ExpectedError: ErrorWhileMarshalling,
-			}),
-			Entry("function invocation error (using go's error return type)", TestCase{
-				ContentType:   "text/plain",
-				In:            []byte("fail"),
-				Expected:      Equal([]byte("Oops")),
-				ExpectedError: InvocationError,
-			}),
-		)
+		It("should support supplier-style functions", func() {
+			result, err := sidecar.Recv()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Payload).To(Equal([]byte("0")))
+
+			result, err = sidecar.Recv()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Payload).To(Equal([]byte("1")))
+
+			go func() {
+				time.Sleep(100 * time.Millisecond)
+				err = sidecar.CloseSend()
+
+			}()
+
+			Eventually(func() error {
+				_, err := sidecar.Recv()
+				return err
+			}, 1*time.Second, 10*time.Millisecond).Should(MatchError(io.EOF))
+
+		})
+
 	})
 
-	Context("with any function that can be invoked", func() {
-		BeforeEach(func() {
-			handler = "StringInStringOut"
+	Context("with 'direct' style functions", func() {
+		Context("with f(X) (Y, error)", func() {
+			BeforeEach(func() {
+				handler = "Direct1"
+			})
+			It("should support successful invocation", func() {
+				go func() {
+					defer GinkgoRecover()
+					err := sidecar.Send(msg("21", "Content-Type", "text/plain", "Accept", "text/plain"))
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				result, err := sidecar.Recv()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Payload).To(Equal([]byte("42")))
+
+			})
+			It("should support error invocation", func() {
+				go func() {
+					defer GinkgoRecover()
+					err := sidecar.Send(msg("foo", "Content-Type", "text/plain", "Accept", "text/plain"))
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				_, err := sidecar.Recv()
+				Expect(err).To(MatchError(ContainSubstring(`strconv.Atoi: parsing "foo": invalid syntax`)))
+
+			})
+		})
+		Context("with f(X) Y", func() {
+			BeforeEach(func() {
+				handler = "Direct2"
+			})
+			It("should support successful invocation", func() {
+				go func() {
+					defer GinkgoRecover()
+					err := sidecar.Send(msg("21", "Content-Type", "text/plain", "Accept", "text/plain"))
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				result, err := sidecar.Recv()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Payload).To(Equal([]byte("42")))
+			})
 		})
 
-		It("should receive back correlationId if provided", func() {
-			headers := map[string]string{CorrelationId: "foobar"}
-			m := &function.Message{Payload: []byte(""), Headers: convert(headers)}
-			r := invoker.invoke(m)
-			Expect(r.Headers[CorrelationId].GetValues()[0], Equal("foobar"))
+		Context("with f(X)", func() {
+			BeforeEach(func() {
+				handler = "Direct3"
+			})
+			It("should support successful invocation", func() {
+
+				port := 1024 + rand.Intn(65536-1024)
+				c := make(chan struct{})
+				server := http.Server{
+					Addr:    fmt.Sprintf(":%v", port),
+					Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { close(c) }),
+				}
+				go func() {
+					server.ListenAndServe()
+				}()
+
+				err := sidecar.Send(msg(fmt.Sprintf("http://localhost:%v", port), "Content-Type", "text/plain"))
+				Expect(err).NotTo(HaveOccurred())
+				err = sidecar.CloseSend()
+				Expect(err).NotTo(HaveOccurred())
+				<-c
+				server.Close()
+			})
+		})
+
+		Context("with f(X) error", func() {
+			BeforeEach(func() {
+				handler = "Direct4"
+			})
+			It("should support successful invocation", func() {
+				go func() {
+					defer GinkgoRecover()
+					err := sidecar.Send(msg("riff", "Content-Type", "text/plain", "Accept", "text/plain"))
+					Expect(err).NotTo(HaveOccurred())
+
+					err = sidecar.CloseSend()
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				_, err := sidecar.Recv()
+				Expect(err).To(MatchError(io.EOF))
+			})
+			It("should support error invocations", func() {
+				go func() {
+					defer GinkgoRecover()
+					err := sidecar.Send(msg("Hello Riff", "Content-Type", "text/plain", "Accept", "text/plain"))
+					Expect(err).NotTo(HaveOccurred())
+
+					err = sidecar.CloseSend()
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				_, err := sidecar.Recv()
+				Expect(err).To(MatchError(ContainSubstring("Hello Riff contained 'Riff'")))
+			})
+		})
+
+		Context("with f() (Y, error)", func() {
+			BeforeEach(func() {
+				handler = "Direct5"
+			})
+			It("should support successful invocation", func() {
+				go func() {
+					defer GinkgoRecover()
+					err := sidecar.CloseSend()
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				result, err := sidecar.Recv()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Payload).To(Equal([]byte("5")))
+			})
+		})
+		Context("with f() (Y, error)", func() {
+			BeforeEach(func() {
+				handler = "Direct5e"
+			})
+			It("should support error invocations", func() {
+				go func() {
+					defer GinkgoRecover()
+					err := sidecar.CloseSend()
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				_, err := sidecar.Recv()
+				Expect(err).To(MatchError(ContainSubstring("Direct5e error")))
+			})
+		})
+		Context("with f() Y", func() {
+			BeforeEach(func() {
+				handler = "Direct6"
+			})
+			It("should support successful invocations", func() {
+				go func() {
+					defer GinkgoRecover()
+					err := sidecar.CloseSend()
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				result, err := sidecar.Recv()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Payload).To(Equal([]byte("42")))
+			})
+		})
+		Context("with f() error", func() {
+			BeforeEach(func() {
+				handler = "Direct8"
+			})
+			It("should support successful invocations", func() {
+				go func() {
+					defer GinkgoRecover()
+					err := sidecar.CloseSend()
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				_, err := sidecar.Recv()
+				Expect(err).To(MatchError(io.EOF))
+			})
+		})
+		Context("with f() error", func() {
+			BeforeEach(func() {
+				handler = "Direct8e"
+			})
+			It("should support error invocations", func() {
+				go func() {
+					defer GinkgoRecover()
+					err := sidecar.CloseSend()
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				_, err := sidecar.Recv()
+				Expect(err).To(MatchError(ContainSubstring("Direct8e error")))
+			})
 		})
 	})
-
 })
+
+func msg(payload string, headers ... string) *function.Message {
+	m := make(map[string]*function.Message_HeaderValue, len(headers)/2)
+	for i := 0; i < len(headers); i += 2 {
+		m[headers[i]] = &function.Message_HeaderValue{Values: []string{headers[i+1]}}
+	}
+	return &function.Message{Payload: []byte(payload), Headers: m}
+
+}
 
 func sourceOf(lib string) string {
 	result := []rune(lib)
 	result[len(lib)-len("so")] = 'g'
 	return string(result)
-}
-
-func convert(hs map[string]string) map[string]*function.Message_HeaderValue {
-	result := make(map[string]*function.Message_HeaderValue, len(hs))
-	for k, v := range hs {
-		result[k] = &function.Message_HeaderValue{Values: []string{v}}
-	}
-	return result
 }

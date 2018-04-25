@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"bytes"
+	"strconv"
 )
 
 type MediaType string
@@ -89,7 +90,7 @@ type textMarshalling struct {
 func (*textMarshalling) supportedMediaTypes(t reflect.Type) []MediaType {
 	var pstringer *fmt.Stringer
 	stringerType := reflect.TypeOf(pstringer).Elem()
-	if t.AssignableTo(stringerType) || t.Kind() == reflect.String {
+	if t.AssignableTo(stringerType) || t.Kind() == reflect.String || t.Kind() == reflect.Int{
 		return []MediaType{"text/plain"}
 	} else {
 		return nil
@@ -99,6 +100,8 @@ func (*textMarshalling) supportedMediaTypes(t reflect.Type) []MediaType {
 func (*textMarshalling) marshall(value interface{}, w io.Writer, mediaType MediaType) error {
 	var s string
 	switch v := value.(type) {
+	case int:
+		s = strconv.Itoa(v)
 	case string:
 		s = v
 	case fmt.Stringer:

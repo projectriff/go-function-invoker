@@ -18,19 +18,17 @@ package server
 
 import (
 	"github.com/golang/gddo/httputil"
-	"github.com/projectriff/go-function-invoker/pkg/function"
 	"net/http"
 )
 
 // bestMarshaller inspects the provided map of Marshallers and the incoming Message's Accept header,
 // and returns the marshaller (and mediaType) that best fits one of the accepted media type.
 // If no match is found, (nil, "") is returned.
-func bestMarshaller(in *function.Message, marshallers map[MediaType]Marshaller) (Marshaller, MediaType) {
-	acceptHeaders := in.Headers["Accept"].GetValues()
-	if acceptHeaders == nil {
-		acceptHeaders = []string{"text/plain"}
+func bestMarshaller(accept []string, marshallers map[MediaType]Marshaller) (Marshaller, MediaType) {
+	if accept == nil {
+		accept = []string{"text/plain"}
 	}
-	fakeRequest := http.Request{Header: http.Header{"Accept": acceptHeaders}}
+	fakeRequest := http.Request{Header: http.Header{"Accept": accept}}
 	offers := make([]string, 0, len(marshallers))
 	for o, _ := range marshallers {
 		offers = append(offers, string(o))
