@@ -26,12 +26,8 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/codes"
 	"os"
 )
-
-// TODO: be notified of input errors?
 
 const (
 	// Headers
@@ -56,7 +52,7 @@ const (
 )
 
 type pluginInvoker struct {
-	// user function to invoke, in 'canonical' func (in <-chan X) (out <-chan Y, [errs <-chan error]) form.
+	// user function to invoke, in 'canonical' func (in <-chan X) (out <-chan Y [, errs <-chan error]) form.
 	fn            reflect.Value
 	inType        reflect.Type // The in channel elem type.
 	marshallers   []Marshaller
@@ -71,16 +67,12 @@ type invokerError struct {
 	message string
 }
 
-// requestReplyHeaders is the set of headers that should be copied from incoming message to outgoing message, if present
-var requestReplyHeaders []string
-
 var errorType = reflect.TypeOf((*error)(nil)).Elem()
 var nilError reflect.Value
 
 var Log *log.Logger
 
 func init() {
-	requestReplyHeaders = []string{CorrelationId}
 	var e error
 	nilError = reflect.ValueOf(&e).Elem()
 
@@ -114,12 +106,6 @@ func (pi *pluginInvoker) Call(callServer function.MessageFunction_CallServer) er
 				input.Close()
 				errs <- nil
 				Log.Printf("[S->F] Reached EOF\n")
-				break
-			}
-			if status.Code(err) == codes.Canceled {
-				Log.Printf("[S->F] Canceled by other goroutine? %#v\n", err)
-				input.Close()
-				errs <- err // no use
 				break
 			}
 			if err != nil {
@@ -391,7 +377,7 @@ func (invoker *pluginInvoker) canonicalize() error {
 			return fmt.Errorf("second return type of function should be ([<-]chan error) in %#v", invoker.fn)
 		}
 	} else {
-		// The original fn could have all the following forms:
+		// The original fn could have any of the following forms:
 		// f(X) (Y, error)
 		// f(X) Y
 		// f(X)
@@ -403,6 +389,7 @@ func (invoker *pluginInvoker) canonicalize() error {
 
 		oldFn := invoker.fn
 
+		// TODO: check IN or OUT are not channel
 		invoker.inType = reflect.TypeOf(struct{}{})
 		if oldFn.Type().NumIn() > 1 {
 			return fmt.Errorf("too many arguments to non streaming function: %#v", oldFn)
@@ -417,7 +404,7 @@ func (invoker *pluginInvoker) canonicalize() error {
 			outType = oldFn.Type().Out(0)
 		}
 
-		newFun := func(args []reflect.Value) []reflect.Value {
+		wrapper := func(args []reflect.Value) []reflect.Value {
 			in := args[0]
 			out := makeChannel(outType)
 			errs := makeChannel(errorType)
@@ -456,7 +443,7 @@ func (invoker *pluginInvoker) canonicalize() error {
 		cOutType := reflect.ChanOf(reflect.BothDir, outType)
 		cErrorType := reflect.ChanOf(reflect.BothDir, errorType)
 		t := reflect.FuncOf([]reflect.Type{cInType}, []reflect.Type{cOutType, cErrorType}, false)
-		invoker.fn = reflect.MakeFunc(t, newFun)
+		invoker.fn = reflect.MakeFunc(t, wrapper)
 
 		return nil
 	}

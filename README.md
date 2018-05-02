@@ -28,12 +28,12 @@ func Foo(input <-chan X) <-chan Y {
 where `X` and `Y` can be anything that can be (un)marshalled via content negotiation.
 
 
-Additionally, the function can return a second, receving channel of type `error` to signal errors.
+Additionally, the function can return a second, receiving channel of type `error` to signal errors.
 The function invocation will abort if any error is received (meaning only the first error is
 ever going to be considered):
 
 ```go
-func Foo(input <-chan X) (<-chan Y, <-chan error) {
+func Foo(input <-chan X) (output <-chan Y, errs <-chan error) {
 }
 ```
 This is more or less the canonical form of functions described in [Pipelines and cancellation](https://blog.golang.org/pipelines).
@@ -45,9 +45,9 @@ The general contract of supported functions is the following:
 * the function **must** have the signature(s) described above
 * the function **must** return "immediately". Actual processing of data is
 to be handled in a new goroutine
-* the function is responsible for **creating** the result _out_ (as well as
+* the function is responsible for **creating** the result _output_ (as well as
 the optional `error` channel)
-* the function is responsible for **closing** the aforementioned channels
+* the function is responsible for **closing** the result and error channel(s)
 * closure of the _input_ channel signals the end of input data.
 * the goroutine should return after having written to the error channel
 
