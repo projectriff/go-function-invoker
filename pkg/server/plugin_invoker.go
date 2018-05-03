@@ -70,72 +70,112 @@ type invokerError struct {
 var errorType = reflect.TypeOf((*error)(nil)).Elem()
 var nilError reflect.Value
 
-var Log *log.Logger
+var Trace *log.Logger // exported so the main package can redirect output
 
 func init() {
 	var e error
 	nilError = reflect.ValueOf(&e).Elem()
 
-	Log = log.New(os.Stdout, "", log.LstdFlags)
+	Trace = log.New(os.Stdout, "", log.LstdFlags)
+}
+
+// type shared captures all coordination state between the two goroutines and the Call()
+// function, to make function signatures more digestible.
+type shared struct {
+	input  reflect.Value // reflects the 'input' channel to the user function
+	output reflect.Value // reflects the 'output' channel of the user function
+	fnErrs reflect.Value // reflects the 'errors' channel of the user function (optional)
+
+	sidecar function.MessageFunction_CallServer
+
+	errs chan error    // used to signal errors to the Call() function
+	done chan struct{} // used to broadcast early cancellation to all parties, and opt out of an otherwise blocking channel operation
+
+	// TODO: make Accept passing a responsibility of the sidecar
+	// TODO: make correlationId propagation a responsibility of the sidecar
+	acceptC chan []string
+	// Temp: assume it's the invoker responsibility to propagate the correlationId when present
+	// this will only make sense with f: X -> Y functions
+	correlationIdC chan []string
 }
 
 func (pi *pluginInvoker) Call(callServer function.MessageFunction_CallServer) error {
-
+	
 	input := makeChannel(pi.inType)
-
 	channelValues := pi.fn.Call([]reflect.Value{input})
 
-	output := channelValues[0]
+	ss := &shared{
+		input:          input,
+		output:         channelValues[0],
+		sidecar:        callServer,
+		errs:           make(chan error, 1),
+		done:           make(chan struct{}),
+		acceptC:        make(chan []string, 1),
+		correlationIdC: make(chan []string, 1),
+	}
 
-	errs := make(chan error, 1)
-	done := make(chan struct{}) // For early cancellation
-
-	// Temp: assume Accept is *per Call()* and that an input needs to first be received
-	acceptC := make(chan []string, 1)
-
-	// Temp: assume it's the invoker responsibility to propagate the correlationId when present
-	// this will only make sense with f: X -> Y functions
-	correlationIdC := make(chan []string, 1)
+	if len(channelValues) == 2 {
+		ss.fnErrs = channelValues[1]
+	}
 
 	// Sidecar => function input
-	go func() {
+	go pi.sidecar2Function()(ss)
+
+	// Function output => sidecar
+	go pi.function2Sidecar()(ss)
+
+	var err error
+	for i := 0; i < 2+(len(channelValues)-1); i++ { // Read errors from both goroutines + 1 optional from fn itself
+		err, _ = <-ss.errs // Will read the zero value of error, which is nil, in case none was posted
+		if err != nil {
+			break
+		}
+	}
+
+	Trace.Printf("Exiting Call(). error = %#v\n", err)
+	return err
+
+}
+
+func (pi *pluginInvoker) sidecar2Function() func(*shared) {
+	return func(s *shared) {
 		for {
 
-			in, err := callServer.Recv()
+			in, err := s.sidecar.Recv()
 			if err == io.EOF {
-				input.Close()
-				errs <- nil
-				Log.Printf("[S->F] Reached EOF\n")
+				s.input.Close()
+				s.errs <- nil
+				Trace.Printf("[Sidecar -> Function] Reached EOF\n")
 				break
 			}
 			if err != nil {
-				Log.Printf("[S->F] Error returned from callServer.Recv: %#v\n", err)
-				input.Close()
-				errs <- err
+				Trace.Printf("[Sidecar -> Function] Error returned from callServer.Recv: %#v\n", err)
+				s.input.Close()
+				s.errs <- err
 				break
 			}
 
 			if in.Headers[Accept] != nil {
 				select {
-				case acceptC <- in.Headers[Accept].Values:
+				case s.acceptC <- in.Headers[Accept].Values:
 				default:
 				}
 			}
 			if in.Headers[CorrelationId] != nil {
 				select {
-				case correlationIdC <- in.Headers[CorrelationId].Values:
+				case s.correlationIdC <- in.Headers[CorrelationId].Values:
 				default:
 				}
 			}
 
 			unmarshalled, err := pi.messageToFunctionArgs(in)
 			if err != nil {
-				Log.Printf("[S->F] Sending %v to errors\n", err)
-				input.Close()
-				errs <- err
+				Trace.Printf("[Sidecar -> Function] Sending %v to errors\n", err)
+				s.input.Close()
+				s.errs <- err
 				break
 			}
-			Log.Printf("[S->F] About to send %v to function\n", unmarshalled)
+			Trace.Printf("[Sidecar -> Function] About to send %v to function\n", unmarshalled)
 
 			//select {
 			//	case input <- unmarshalled:
@@ -143,32 +183,33 @@ func (pi *pluginInvoker) Call(callServer function.MessageFunction_CallServer) er
 			//    break
 			//}
 			cases := []reflect.SelectCase{
-				{Dir: reflect.SelectSend, Chan: input, Send: reflect.ValueOf(unmarshalled)},
-				{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(done)},
+				{Dir: reflect.SelectSend, Chan: s.input, Send: reflect.ValueOf(unmarshalled)},
+				{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.done)},
 			}
 			chosen, _, recvOK := reflect.Select(cases)
 			if chosen == 1 {
 				if recvOK {
 					panic("illegal state: should only fall in this case because done channel was closed")
 				}
-				input.Close()
-				errs <- nil
+				s.input.Close()
+				s.errs <- nil
 				break
 			}
 		}
-		Log.Printf("[S->F] Returning from sidecar => function input goroutine\n")
-	}()
+		Trace.Printf("[Sidecar -> Function] Returning from sidecar => function input goroutine\n")
+	}
+}
 
-	// Function output => sidecar
-	go func() {
+func (pi *pluginInvoker) function2Sidecar() func(*shared) {
+	return func(s *shared) {
 		var accept []string
 
 		cases := []reflect.SelectCase{
-			{Dir: reflect.SelectRecv, Chan: output},
+			{Dir: reflect.SelectRecv, Chan: s.output},
 		}
 		open := 1
-		if len(channelValues) == 2 { // user function has a (<-chan error) second result
-			cases = append(cases, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: channelValues[1]})
+		if s.fnErrs.IsValid() { // user function has a (<-chan error) second result
+			cases = append(cases, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: s.fnErrs})
 			open++
 		}
 
@@ -177,10 +218,10 @@ func (pi *pluginInvoker) Call(callServer function.MessageFunction_CallServer) er
 			chosen, value, more := reflect.Select(cases)
 			switch chosen {
 			case 0: // output
-				Log.Printf("[F->S] Returning %v more=%v\n", value, more)
+				Trace.Printf("[Function -> Sidecar] Returning %v more=%v\n", value, more)
 
 				if !more {
-					errs <- nil
+					s.errs <- nil
 					cases[chosen].Chan = reflect.ValueOf(nil)
 					open--
 					break
@@ -188,7 +229,7 @@ func (pi *pluginInvoker) Call(callServer function.MessageFunction_CallServer) er
 
 				if accept == nil {
 					select {
-					case v := <-acceptC:
+					case v := <-s.acceptC:
 						accept = v
 					default:
 						accept = []string{"text/plain"}
@@ -197,45 +238,37 @@ func (pi *pluginInvoker) Call(callServer function.MessageFunction_CallServer) er
 
 				marshalled, err := pi.functionResultToMessage(value.Interface(), accept)
 				if err != nil {
-					Log.Printf("[F->S] Error returned from marshall: %#v\n", err)
-					errs <- err
+					Trace.Printf("[Function -> Sidecar] Error returned from marshall: %#v\n", err)
+					s.errs <- err
 					cases[chosen].Chan = reflect.ValueOf(nil)
 					open--
-					close(done)
+					close(s.done)
 					break
 				}
 
 				select {
-				case v := <-correlationIdC:
+				case v := <-s.correlationIdC:
 					marshalled.Headers[CorrelationId] = &function.Message_HeaderValue{Values: v}
 				default:
 				}
 
-				err = callServer.Send(marshalled)
-				if err == io.EOF {
-					Log.Println("[F->S] EOF returned from callServer.Send")
-					errs <- err
-					cases[chosen].Chan = reflect.ValueOf(nil)
-					open--
-					close(done)
-					break
-				}
+				err = s.sidecar.Send(marshalled)
 				if err != nil {
-					Log.Printf("[F->S] Error returned from callServer.Send: %v\n", err)
-					errs <- err
+					Trace.Printf("[Function -> Sidecar] Error returned from callServer.Send: %v\n", err)
+					s.errs <- err
 					cases[chosen].Chan = reflect.ValueOf(nil)
 					open--
-					close(done)
+					close(s.done)
 					break
 				}
 			case 1: // optional error
 				cases[chosen].Chan = reflect.ValueOf(nil)
 				open--
-				if more && !value.IsNil(){
-					errs <- value.Interface().(error)
-					close(done)
+				if more && !value.IsNil() {
+					s.errs <- value.Interface().(error)
+					close(s.done)
 				} else {
-					errs <- nil
+					s.errs <- nil
 				}
 			}
 
@@ -243,21 +276,10 @@ func (pi *pluginInvoker) Call(callServer function.MessageFunction_CallServer) er
 				break
 			}
 		}
-		Log.Printf("[F->S] Returning from function output => sidecar goroutine\n")
-	}()
-
-	var err error
-	for i := 0 ; i < 2 + (len(channelValues)-1) ; i++ { // Read errors from both goroutines + 1 optional from fn itself
-		err, _ = <-errs // Will read the zero value of error, which is nil, in case none was posted
-		if err != nil {
-			break
-		}
+		Trace.Printf("[Function -> Sidecar] Returning from function output => sidecar goroutine\n")
 	}
-
-	Log.Printf("At end error = %#v\n", err)
-	return err
-
 }
+
 
 func (pi *pluginInvoker) messageToFunctionArgs(in *function.Message) (interface{}, error) {
 	contentType := AssumedContentType
@@ -332,7 +354,7 @@ func NewInvoker(fnUri string) (*pluginInvoker, error) {
 	result.fn = reflect.ValueOf(fnSymbol)
 	err = result.canonicalize()
 
-	Log.Printf("FUNCTION %v = %#v\n", fnName, result.fn)
+	Trace.Printf("FUNCTION %v = %#v\n", fnName, result.fn)
 
 	result.marshallers = []Marshaller{&jsonMarshalling{}, &textMarshalling{}}
 	result.unmarshallers = []Unmarshaller{&jsonMarshalling{}, &textMarshalling{}}
@@ -414,7 +436,7 @@ func (invoker *pluginInvoker) canonicalize() error {
 				defer errs.Close()
 
 				i, open := in.Recv()
-				Log.Printf("[-F->] In function, input = %#v, open=%v\n", i, open)
+				Trace.Printf("[-Function Wrapper->] In function, input = %#v, open=%v\n", i, open)
 				var fnResult []reflect.Value
 				if open {
 					// original function receiving actual input
@@ -427,12 +449,12 @@ func (invoker *pluginInvoker) canonicalize() error {
 					return
 				}
 
-				Log.Printf("[-F->] In function, result = %#v\n", unwrap(fnResult))
+				Trace.Printf("[-Function Wrapper->] In function, result = %#v\n", unwrap(fnResult))
 				if isErroring(oldFn) && !fnResult[oldFn.Type().NumOut()-1].IsNil() {
-					Log.Printf("[-F->] Sending error %#v", fnResult[oldFn.Type().NumOut()-1])
+					Trace.Printf("[-Function Wrapper->] Sending error %#v", fnResult[oldFn.Type().NumOut()-1])
 					errs.Send(fnResult[oldFn.Type().NumOut()-1])
 				} else if hasReturnValue(oldFn) {
-					Log.Printf("[-F->] Sending result %#v", fnResult[0])
+					Trace.Printf("[-Function Wrapper->] Sending result %#v", fnResult[0])
 					out.Send(fnResult[0])
 				}
 			}()
