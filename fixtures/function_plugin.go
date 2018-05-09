@@ -90,6 +90,20 @@ func SupplierFunc(in chan struct{}) (<-chan int) {
 	return out
 }
 
+func RunningAverage(in <-chan float32) <-chan float32 {
+	out := make(chan float32)
+	go func() {
+		defer close(out)
+		n := 0
+		sum := float32(0)
+		for f := range in {
+			sum += f
+			n++
+			out <- sum/float32(n)
+		}
+	}()
+	return out
+}
 
 // f(X) (Y, error)
 // f(X) Y
@@ -146,4 +160,3 @@ func Direct8() error {
 func Direct8e() error {
 	return errors.New("Direct8e error")
 }
-

@@ -41,7 +41,6 @@ type Marshaller interface {
 
 // Unmarshaller is used to read bytes to a runtime go object, according to a given mediaType.
 type Unmarshaller interface {
-
 	// canUnmarshall should return true if it supports the target receiving type t and the given mediaType (typically
 	// the value of a 'Content-Type' header). A subsequent call to unmarshall with that mediaType should not fail
 	// by lack of support of that (type, mediaType) combination.
@@ -90,18 +89,24 @@ type textMarshalling struct {
 func (*textMarshalling) supportedMediaTypes(t reflect.Type) []MediaType {
 	var pstringer *fmt.Stringer
 	stringerType := reflect.TypeOf(pstringer).Elem()
-	if t.AssignableTo(stringerType) || t.Kind() == reflect.String || t.Kind() == reflect.Int{
+	if t.AssignableTo(stringerType) || t.Kind() == reflect.String || t.Kind() == reflect.Int || t.Kind() == reflect.Float32 ||
+		t.Kind() == reflect.Float64 {
 		return []MediaType{"text/plain"}
 	} else {
 		return nil
 	}
 }
 
+// X -> string
 func (*textMarshalling) marshall(value interface{}, w io.Writer, mediaType MediaType) error {
 	var s string
 	switch v := value.(type) {
 	case int:
 		s = strconv.Itoa(v)
+	case float32:
+		s = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		s = strconv.FormatFloat(v, 'f', -1, 64)
 	case string:
 		s = v
 	case fmt.Stringer:
@@ -117,11 +122,28 @@ func (*textMarshalling) canUnmarshall(t reflect.Type, mediaType MediaType) bool 
 		return false
 	}
 	return contentType == "text/plain" &&
-		t.Kind() == reflect.String
+		(t.Kind() == reflect.String || t.Kind() == reflect.Int || t.Kind() == reflect.Float32 || t.Kind() == reflect.Float64)
 }
 
+// string -> X
 func (*textMarshalling) unmarshall(r io.Reader, t reflect.Type, mediaType MediaType) (interface{}, error) {
 	buf := new(bytes.Buffer)
 	_, err := buf.ReadFrom(r)
-	return buf.String(), err
+	if err != nil {
+		return nil, err
+	}
+	switch t.Kind() {
+	case reflect.String:
+		return buf.String(), err
+	case reflect.Int:
+		return strconv.Atoi(buf.String())
+	case reflect.Float32:
+		f, err := strconv.ParseFloat(buf.String(), 32)
+		return float32(f), err
+	case reflect.Float64:
+		return strconv.ParseFloat(buf.String(), 64)
+	default:
+		panic("Unreachable thanks to canUnmarshall()")
+
+	}
 }

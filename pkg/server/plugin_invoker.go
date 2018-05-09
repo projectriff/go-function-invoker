@@ -132,7 +132,7 @@ func (pi *pluginInvoker) Call(callServer function.MessageFunction_CallServer) er
 		}
 	}
 
-	Trace.Printf("Exiting Call(). error = %#v\n", err)
+	Trace.Printf("Exiting Call(). error = %#v\n\n", err)
 	return err
 
 }
