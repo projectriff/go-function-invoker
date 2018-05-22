@@ -94,9 +94,6 @@ type shared struct {
 	// TODO: make Accept passing a responsibility of the sidecar
 	// TODO: make correlationId propagation a responsibility of the sidecar
 	acceptC chan []string
-	// Temp: assume it's the invoker responsibility to propagate the correlationId when present
-	// this will only make sense with f: X -> Y functions
-	correlationIdC chan []string
 }
 
 func (pi *pluginInvoker) Call(callServer function.MessageFunction_CallServer) error {
@@ -111,7 +108,6 @@ func (pi *pluginInvoker) Call(callServer function.MessageFunction_CallServer) er
 		errs:           make(chan error, 1),
 		done:           make(chan struct{}),
 		acceptC:        make(chan []string, 1),
-		correlationIdC: make(chan []string, 1),
 	}
 
 	if len(channelValues) == 2 {
@@ -161,13 +157,6 @@ func (pi *pluginInvoker) sidecar2Function() func(*shared) {
 				default:
 				}
 			}
-			if in.Headers[CorrelationId] != nil {
-				select {
-				case s.correlationIdC <- in.Headers[CorrelationId].Values:
-				default:
-				}
-			}
-
 			unmarshalled, err := pi.messageToFunctionArgs(in)
 			if err != nil {
 				Trace.Printf("[Sidecar -> Function] Sending %v to errors\n", err)
@@ -244,12 +233,6 @@ func (pi *pluginInvoker) function2Sidecar() func(*shared) {
 					open--
 					close(s.done)
 					break
-				}
-
-				select {
-				case v := <-s.correlationIdC:
-					marshalled.Headers[CorrelationId] = &function.Message_HeaderValue{Values: v}
-				default:
 				}
 
 				err = s.sidecar.Send(marshalled)
