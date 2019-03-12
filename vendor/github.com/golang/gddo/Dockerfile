@@ -1,7 +1,7 @@
 FROM golang:latest
 
 # Install redis, nginx, daemontools, etc.
-RUN echo deb http://http.debian.net/debian wheezy-backports main > /etc/apt/sources.list.d/backports.list && \
+RUN echo deb http://cdn-fastly.deb.debian.org/debian wheezy-backports main > /etc/apt/sources.list.d/backports.list && \
 	apt-get update && \
 	apt-get install -y --no-install-recommends -t wheezy-backports redis-server && \
 	apt-get install -y --no-install-recommends graphviz nginx-full daemontools unzip
