@@ -43,23 +43,23 @@ func TestTransportGithubAuth(t *testing.T) {
 		},
 		{
 			name:  "non-Github site does not have token headers",
-			url:   "http://www.example.com/",
+			url:   "https://www.example.com/",
 			token: "xyzzy",
 		},
 		{
 			name:         "non-Github site does not have client ID/secret headers",
-			url:          "http://www.example.com/",
+			url:          "https://www.example.com/",
 			clientID:     "12345",
 			clientSecret: "xyzzy",
 		},
 		{
 			name:  "Github token not sent over HTTP",
-			url:   "http://api.github.com/",
+			url:   "https://api.github.com/",
 			token: "xyzzy",
 		},
 		{
 			name:         "Github client ID/secret not sent over HTTP",
-			url:          "http://api.github.com/",
+			url:          "https://api.github.com/",
 			clientID:     "12345",
 			clientSecret: "xyzzy",
 		},

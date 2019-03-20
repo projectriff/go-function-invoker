@@ -23,7 +23,7 @@ var isBrowseURLTests = []struct {
 	{"https://bitbucket.org/user/repo", "bitbucket.org/user/repo", true},
 	{"https://github.com/user/repo", "github.com/user/repo", true},
 	{"https://github.com/user/repo/tree/master/p1", "github.com/user/repo/p1", true},
-	{"http://code.google.com/p/project", "code.google.com/p/project", true},
+	{"https://code.google.com/p/project", "code.google.com/p/project", true},
 }
 
 func TestIsBrowseURL(t *testing.T) {

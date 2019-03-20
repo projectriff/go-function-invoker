@@ -928,7 +928,7 @@ func newServer(ctx context.Context, v *viper.Viper) (*server, error) {
 	mux.Handle("/humans.txt", staticServer.FileHandler("humans.txt"))
 	mux.Handle("/robots.txt", staticServer.FileHandler("robots.txt"))
 	mux.Handle("/BingSiteAuth.xml", staticServer.FileHandler("BingSiteAuth.xml"))
-	mux.Handle("/C", http.RedirectHandler("http://golang.org/doc/articles/c_go_cgo.html", http.StatusMovedPermanently))
+	mux.Handle("/C", http.RedirectHandler("https://golang.org/doc/articles/c_go_cgo.html", http.StatusMovedPermanently))
 	mux.Handle("/code.jquery.com/", http.NotFoundHandler())
 	mux.Handle("/", handler(s.serveHome))
 

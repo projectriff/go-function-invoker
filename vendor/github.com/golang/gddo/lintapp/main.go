@@ -117,7 +117,7 @@ func httpClient(r *http.Request) *http.Client {
 			GithubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
 			GithubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
 			Base:               &urlfetch.Transport{Context: c},
-			UserAgent:          fmt.Sprintf("%s (+http://%s/-/bot)", appengine.AppID(c), r.Host),
+			UserAgent:          fmt.Sprintf("%s (+https://%s/-/bot)", appengine.AppID(c), r.Host),
 		},
 	}
 }

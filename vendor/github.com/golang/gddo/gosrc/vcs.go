@@ -59,8 +59,8 @@ var vcsServices = []*urlTemplates{
 	},
 	{
 		regexp.MustCompile(`^git\.oschina\.net/(?P<repo>[^/]+/[^/]+)$`),
-		"http://git.oschina.net/{repo}/blob/{tag}/{dir}{0}",
-		"http://git.oschina.net/{repo}",
+		"https://git.oschina.net/{repo}/blob/{tag}/{dir}{0}",
+		"https://git.oschina.net/{repo}",
 		"%s#L%d",
 	},
 	{

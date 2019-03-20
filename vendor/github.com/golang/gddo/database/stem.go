@@ -5,7 +5,7 @@
 // https://developers.google.com/open-source/licenses/bsd.
 
 // This file implements the Paice/Husk stemming algorithm.
-// http://www.comp.lancs.ac.uk/computing/research/stemming/Links/paice.htm
+// https://www.lancaster.ac.uk/scc/
 
 package database
 

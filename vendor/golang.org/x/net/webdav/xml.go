@@ -400,7 +400,7 @@ func (w *multistatusWriter) close() error {
 	return w.enc.Flush()
 }
 
-var xmlLangName = ixml.Name{Space: "http://www.w3.org/XML/1998/namespace", Local: "lang"}
+var xmlLangName = ixml.Name{Space: "https://www.w3.org/XML/1998/namespace", Local: "lang"}
 
 func xmlLang(s ixml.StartElement, d string) string {
 	for _, attr := range s.Attr {

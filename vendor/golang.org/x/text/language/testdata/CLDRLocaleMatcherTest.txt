@@ -185,7 +185,7 @@ en, ja ; 	ja-Jpan-JP, en-US ; 	ja	# Match for ja-Jpan-JP (maximized already)
 
 ##################################################
 # testGetBestMatchForList-noMatchOnMaximized
-# Regression test for http://b/5714572 .
+# Regression test for https://b/5714572 .
 # de maximizes to de-DE. Pick the exact match for the secondary language instead.
 en, de, fr, ja ; 	de-CH, fr ; 	de
 
@@ -312,8 +312,8 @@ it, en ; 	und ; 	it
 it, en ; 	und, en ; 	en
 
 # examples from
-# http://unicode.org/repos/cldr/tags/latest/common/bcp47/
-# http://unicode.org/repos/cldr/tags/latest/common/validity/variant.xml
+# https://unicode.org/repos/cldr/tags/latest/common/bcp47/
+# https://unicode.org/repos/cldr/tags/latest/common/validity/variant.xml
 
 ##################################################
 # testUnHack

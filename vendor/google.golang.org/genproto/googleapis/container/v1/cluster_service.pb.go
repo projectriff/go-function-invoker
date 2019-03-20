@@ -406,7 +406,7 @@ type NodeConfig struct {
 	// the Kubernetes version -- it's best to assume the behavior is undefined
 	// and conflicts should be avoided.
 	// For more information, including usage and the valid values, see:
-	// http://kubernetes.io/v1.1/docs/user-guide/labels.html
+	// https://kubernetes.io/v1.1/docs/user-guide/labels.html
 	Labels map[string]string `protobuf:"bytes,6,rep,name=labels" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// The number of local SSD disks to be attached to the node.
 	//
@@ -840,7 +840,7 @@ type IPAllocationPolicy struct {
 	// Set to /netmask (e.g. `/14`) to have a range be chosen with a specific
 	// netmask.
 	//
-	// Set to a [CIDR](http://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing)
+	// Set to a [CIDR](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing)
 	// notation (e.g. `10.96.0.0/14`) from the RFC-1918 private networks (e.g.
 	// `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) to pick a specific range
 	// to use.
@@ -854,7 +854,7 @@ type IPAllocationPolicy struct {
 	// Set to /netmask (e.g. `/14`) to have a range be chosen with a specific
 	// netmask.
 	//
-	// Set to a [CIDR](http://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing)
+	// Set to a [CIDR](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing)
 	// notation (e.g. `10.96.0.0/14`) from the RFC-1918 private networks (e.g.
 	// `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) to pick a specific range
 	// to use.
@@ -869,7 +869,7 @@ type IPAllocationPolicy struct {
 	// Set to /netmask (e.g. `/14`) to have a range be chosen with a specific
 	// netmask.
 	//
-	// Set to a [CIDR](http://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing)
+	// Set to a [CIDR](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing)
 	// notation (e.g. `10.96.0.0/14`) from the RFC-1918 private networks (e.g.
 	// `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) to pick a specific range
 	// to use.
@@ -976,7 +976,7 @@ type Cluster struct {
 	// will be used.
 	Network string `protobuf:"bytes,8,opt,name=network" json:"network,omitempty"`
 	// The IP address range of the container pods in this cluster, in
-	// [CIDR](http://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing)
+	// [CIDR](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing)
 	// notation (e.g. `10.96.0.0/14`). Leave blank to have
 	// one automatically chosen or specify a `/14` block in `10.0.0.0/8`.
 	ClusterIpv4Cidr string `protobuf:"bytes,9,opt,name=cluster_ipv4_cidr,json=clusterIpv4Cidr" json:"cluster_ipv4_cidr,omitempty"`
@@ -1053,7 +1053,7 @@ type Cluster struct {
 	NodeIpv4CidrSize int32 `protobuf:"varint,109,opt,name=node_ipv4_cidr_size,json=nodeIpv4CidrSize" json:"node_ipv4_cidr_size,omitempty"`
 	// [Output only] The IP address range of the Kubernetes services in
 	// this cluster, in
-	// [CIDR](http://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing)
+	// [CIDR](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing)
 	// notation (e.g. `1.2.3.4/29`). Service addresses are
 	// typically put in the last `/16` from the container CIDR.
 	ServicesIpv4Cidr string `protobuf:"bytes,110,opt,name=services_ipv4_cidr,json=servicesIpv4Cidr" json:"services_ipv4_cidr,omitempty"`

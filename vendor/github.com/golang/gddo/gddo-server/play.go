@@ -84,7 +84,7 @@ func (s *server) playURL(pdoc *doc.Package, id, countryHeader string) (string, e
 					err:    fmt.Errorf("Error from play.golang.org: %s", p),
 				}
 			}
-			return fmt.Sprintf("http://play.golang.org/p/%s", p), nil
+			return fmt.Sprintf("https://play.golang.org/p/%25s", p), nil
 		}
 	}
 	return "", &httpError{status: http.StatusNotFound}

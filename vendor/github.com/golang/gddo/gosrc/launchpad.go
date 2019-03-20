@@ -105,7 +105,7 @@ func getLaunchpadDir(ctx context.Context, client *http.Client, match map[string]
 		if d == dirPrefix {
 			files = append(files, &File{
 				Name:      f,
-				BrowseURL: expand("http://bazaar.launchpad.net/+branch/{repo}/view/head:{dir}/{0}", match, f),
+				BrowseURL: expand("https://bazaar.launchpad.net/+branch/{repo}/view/head:{dir}/{0}", match, f),
 				Data:      b})
 		}
 	}
@@ -124,7 +124,7 @@ func getLaunchpadDir(ctx context.Context, client *http.Client, match map[string]
 	}
 
 	return &Directory{
-		BrowseURL:   expand("http://bazaar.launchpad.net/+branch/{repo}/view/head:{dir}/", match),
+		BrowseURL:   expand("https://bazaar.launchpad.net/+branch/{repo}/view/head:{dir}/", match),
 		Etag:        etag,
 		Files:       files,
 		LineFmt:     "%s#L%d",

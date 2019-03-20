@@ -91,7 +91,7 @@ func getGoogleDir(ctx context.Context, client *http.Client, match map[string]str
 				subdirs = append(subdirs, fname)
 			}
 		case isDocFile(fname):
-			files = append(files, &File{Name: fname, BrowseURL: expand("http://code.google.com/{pr}/{repo}/source/browse{dir}/{0}{query}", match, fname)})
+			files = append(files, &File{Name: fname, BrowseURL: expand("https://code.google.com/{pr}/{repo}/source/browse{dir}/{0}{query}", match, fname)})
 			dataURLs = append(dataURLs, expand("http://{subrepo}{dot}{repo}.googlecode.com/{vcs}{dir}/{0}", match, fname))
 		}
 	}
@@ -108,7 +108,7 @@ func getGoogleDir(ctx context.Context, client *http.Client, match map[string]str
 	}
 
 	return &Directory{
-		BrowseURL:   expand("http://code.google.com/{pr}/{repo}/source/browse{dir}/{query}", match),
+		BrowseURL:   expand("https://code.google.com/{pr}/{repo}/source/browse{dir}/{query}", match),
 		Etag:        etag,
 		Files:       files,
 		LineFmt:     "%s#%d",
@@ -131,7 +131,7 @@ func setupGoogleMatch(match map[string]string) {
 
 func getGoogleVCS(ctx context.Context, c *httpClient, match map[string]string) error {
 	// Scrape the HTML project page to find the VCS.
-	p, err := c.getBytes(ctx, expand("http://code.google.com/{pr}/{repo}/source/checkout", match))
+	p, err := c.getBytes(ctx, expand("https://code.google.com/{pr}/{repo}/source/checkout", match))
 	if err != nil {
 		return err
 	}

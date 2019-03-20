@@ -110,10 +110,10 @@ var referencesPats = []*regexp.Regexp{
 	regexp.MustCompile(`\b(?:` + strings.Join([]string{
 		`go\s+get\s+`,
 		`goinstall\s+`,
-		regexp.QuoteMeta("http://godoc.org/"),
-		regexp.QuoteMeta("http://gopkgdoc.appspot.com/pkg/"),
-		regexp.QuoteMeta("http://go.pkgdoc.org/"),
-		regexp.QuoteMeta("http://gowalker.org/"),
+		regexp.QuoteMeta("https://godoc.org/"),
+		regexp.QuoteMeta("https://gopkgdoc.appspot.com/pkg/"),
+		regexp.QuoteMeta("https://go.pkgdoc.org/"),
+		regexp.QuoteMeta("https://gowalker.org/"),
 	}, "|") + `)([-a-zA-Z0-9~+_./]+)`),
 }
 

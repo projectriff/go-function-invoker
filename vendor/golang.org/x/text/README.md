@@ -2,7 +2,7 @@ This repository holds supplementary Go libraries for text processing, many invol
 
 
 # Semantic Versioning
-This repo uses Semantic versioning (http://semver.org/), so
+This repo uses Semantic versioning (https://semver.org/), so
 1. MAJOR version when you make incompatible API changes,
 1. MINOR version when you add functionality in a backwards-compatible manner,
    and
@@ -20,7 +20,7 @@ Any other new CLDR version is mapped to a patch version increase in x/text.
 
 
 # Contribute
-To submit changes to this repository, see http://golang.org/doc/contribute.html.
+To submit changes to this repository, see https://golang.org/doc/contribute.html.
 
 To generate the tables in this repository (except for the encoding tables),
 run go generate from this directory. By default tables are generated for the

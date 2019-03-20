@@ -74,7 +74,7 @@ func TestUnmarshalRequest(t *testing.T) {
 	for _, test := range testIO {
 		t.Run(test.cType, func(t *testing.T) {
 			// create new http request
-			req, _ := http.NewRequest("PUT", "http://example.com",
+			req, _ := http.NewRequest("PUT", "https://example.com",
 				bytes.NewReader([]byte(test.body)))
 			req.Header[ContentTypeHeader] = []string{test.cType}
 
@@ -121,7 +121,7 @@ func TestUnmarshalRequestBodyError(t *testing.T) {
 
 	for _, test := range testIO {
 		t.Run(test.err.Error(), func(t *testing.T) {
-			req, _ := http.NewRequest("PUT", "http://example.com", test.body)
+			req, _ := http.NewRequest("PUT", "https://example.com", test.body)
 			req.Header[ContentTypeHeader] = []string{testContentNegotiatorType}
 			err := UnmarshalMedia(req, test.cn)
 			assert.Equal(t, test.err, err)

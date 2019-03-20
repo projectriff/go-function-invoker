@@ -25,23 +25,23 @@ var testWeb = map[string]string{
 	// Package in sub-diretory.
 	"https://alice.org/pkg/sub": `<head> <meta name="go-import" content="alice.org/pkg git https://github.com/alice/pkg"><body>`,
 	// Fallback to http.
-	"http://alice.org/pkg/http": `<head> <meta name="go-import" content="alice.org/pkg git https://github.com/alice/pkg">`,
+	"https://alice.org/pkg/http": `<head> <meta name="go-import" content="alice.org/pkg git https://github.com/alice/pkg">`,
 	// Meta tag in sub-directory does not match meta tag at root.
 	"https://alice.org/pkg/mismatch": `<head> <meta name="go-import" content="alice.org/pkg hg https://github.com/alice/pkg">`,
 	// More than one matching meta tag.
-	"http://alice.org/pkg/multiple": `<head> ` +
+	"https://alice.org/pkg/multiple": `<head> ` +
 		`<meta name="go-import" content="alice.org/pkg git https://github.com/alice/pkg">` +
 		`<meta name="go-import" content="alice.org/pkg git https://github.com/alice/pkg">`,
 	// Package with go-source meta tag.
 	"https://alice.org/pkg/source": `<head>` +
 		`<meta name="go-import" content="alice.org/pkg git https://github.com/alice/pkg">` +
-		`<meta name="go-source" content="alice.org/pkg http://alice.org/pkg http://alice.org/pkg{/dir} http://alice.org/pkg{/dir}?f={file}#Line{line}">`,
+		`<meta name="go-source" content="alice.org/pkg https://alice.org/pkg https://alice.org/pkg{/dir} https://alice.org/pkg{/dir}?f={file}#Line{line}">`,
 	"https://alice.org/pkg/ignore": `<head>` +
 		`<title>Hello</title>` +
 		// Unknown meta name
-		`<meta name="go-junk" content="alice.org/pkg http://alice.org/pkg http://alice.org/pkg{/dir} http://alice.org/pkg{/dir}?f={file}#Line{line}">` +
+		`<meta name="go-junk" content="alice.org/pkg https://alice.org/pkg https://alice.org/pkg{/dir} https://alice.org/pkg{/dir}?f={file}#Line{line}">` +
 		// go-source before go-meta
-		`<meta name="go-source" content="alice.org/pkg http://alice.org/pkg http://alice.org/pkg{/dir} http://alice.org/pkg{/dir}?f={file}#Line{line}">` +
+		`<meta name="go-source" content="alice.org/pkg https://alice.org/pkg https://alice.org/pkg{/dir} https://alice.org/pkg{/dir}?f={file}#Line{line}">` +
 		// go-import tag for the package
 		`<meta name="go-import" content="alice.org/pkg git https://github.com/alice/pkg">` +
 		// go-import with wrong number of fields
@@ -65,9 +65,9 @@ var testWeb = map[string]string{
 	// Package with go-source meta tag.
 	"https://bob.com/pkg/source": `<head>` +
 		`<meta name="go-import" content="bob.com/pkg git https://vcs.net/bob/pkg.git">` +
-		`<meta name="go-source" content="bob.com/pkg http://bob.com/pkg http://bob.com/pkg{/dir}/ http://bob.com/pkg{/dir}/?f={file}#Line{line}">`,
+		`<meta name="go-source" content="bob.com/pkg https://bob.com/pkg https://bob.com/pkg{/dir}/ https://bob.com/pkg{/dir}/?f={file}#Line{line}">`,
 	// Meta refresh to godoc.org
-	"http://rsc.io/benchstat": `<!DOCTYPE html><html><head>` +
+	"https://rsc.io/benchstat": `<!DOCTYPE html><html><head>` +
 		`<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>` +
 		`<meta name="go-import" content="rsc.io/benchstat git https://github.com/rsc/benchstat">` +
 		`<meta http-equiv="refresh" content="0; url=https://godoc.org/rsc.io/benchstat">` +
@@ -126,26 +126,26 @@ var getDynamicTests = []struct {
 		Files:        []*File{{Name: "main.go", BrowseURL: "https://github.com/alice/pkg/blob/master/http/main.go"}},
 	}},
 	{"alice.org/pkg/source", &Directory{
-		BrowseURL:    "http://alice.org/pkg/source",
+		BrowseURL:    "https://alice.org/pkg/source",
 		ImportPath:   "alice.org/pkg/source",
 		LineFmt:      "%s#Line%d",
 		ProjectName:  "pkg",
 		ProjectRoot:  "alice.org/pkg",
-		ProjectURL:   "http://alice.org/pkg",
+		ProjectURL:   "https://alice.org/pkg",
 		ResolvedPath: "github.com/alice/pkg/source",
 		VCS:          "git",
-		Files:        []*File{{Name: "main.go", BrowseURL: "http://alice.org/pkg/source?f=main.go"}},
+		Files:        []*File{{Name: "main.go", BrowseURL: "https://alice.org/pkg/source?f=main.go"}},
 	}},
 	{"alice.org/pkg/ignore", &Directory{
-		BrowseURL:    "http://alice.org/pkg/ignore",
+		BrowseURL:    "https://alice.org/pkg/ignore",
 		ImportPath:   "alice.org/pkg/ignore",
 		LineFmt:      "%s#Line%d",
 		ProjectName:  "pkg",
 		ProjectRoot:  "alice.org/pkg",
-		ProjectURL:   "http://alice.org/pkg",
+		ProjectURL:   "https://alice.org/pkg",
 		ResolvedPath: "github.com/alice/pkg/ignore",
 		VCS:          "git",
-		Files:        []*File{{Name: "main.go", BrowseURL: "http://alice.org/pkg/ignore?f=main.go"}},
+		Files:        []*File{{Name: "main.go", BrowseURL: "https://alice.org/pkg/ignore?f=main.go"}},
 	}},
 	{"alice.org/pkg/mismatch", nil},
 	{"alice.org/pkg/multiple", nil},
@@ -170,15 +170,15 @@ var getDynamicTests = []struct {
 		Files:        []*File{{Name: "main.go"}},
 	}},
 	{"bob.com/pkg/source", &Directory{
-		BrowseURL:    "http://bob.com/pkg/source/",
+		BrowseURL:    "https://bob.com/pkg/source/",
 		ImportPath:   "bob.com/pkg/source",
 		LineFmt:      "%s#Line%d",
 		ProjectName:  "pkg",
 		ProjectRoot:  "bob.com/pkg",
-		ProjectURL:   "http://bob.com/pkg",
+		ProjectURL:   "https://bob.com/pkg",
 		ResolvedPath: "vcs.net/bob/pkg.git/source",
 		VCS:          "git",
-		Files:        []*File{{Name: "main.go", BrowseURL: "http://bob.com/pkg/source/?f=main.go"}},
+		Files:        []*File{{Name: "main.go", BrowseURL: "https://bob.com/pkg/source/?f=main.go"}},
 	}},
 	{"rsc.io/benchstat", &Directory{
 		BrowseURL:    "https://github.com/rsc/benchstat",

@@ -1,7 +1,7 @@
 lintapp
 =======
 
-This directory contains the source for [go-lint.appspot.com](http://go-lint.appspot.com).
+This directory contains the source for [go-lint.appspot.com](https://go-lint.appspot.com).
 
 Development Environment Setup
 -----------------------------

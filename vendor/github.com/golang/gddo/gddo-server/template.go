@@ -374,7 +374,7 @@ func commentFn(v string) htemp.HTML {
 		return out
 	})
 	p = replaceAll(p, rfcPat, func(out, src []byte, m []int) []byte {
-		out = append(out, `<a href="http://tools.ietf.org/html/rfc`...)
+		out = append(out, `<a href="https://tools.ietf.org/html/rfc`...)
 		out = append(out, src[m[2]:m[3]]...)
 
 		// If available, add section fragment

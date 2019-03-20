@@ -29,15 +29,15 @@ func TestBadSynopsis(t *testing.T) {
 
 const readme = `
     $ go get github.com/user/repo/pkg1
-    [foo](http://gopkgdoc.appspot.com/pkg/github.com/user/repo/pkg2)
-    [foo](http://go.pkgdoc.org/github.com/user/repo/pkg3)
-    [foo](http://godoc.org/github.com/user/repo/pkg4)
-    <http://go.pkgdoc.org/github.com/user/repo/pkg5>
-    [foo](http://godoc.org/github.com/user/repo/pkg6#Export)
-    http://gowalker.org/github.com/user/repo/pkg7
+    [foo](https://gopkgdoc.appspot.com/pkg/github.com/user/repo/pkg2)
+    [foo](https://go.pkgdoc.org/github.com/user/repo/pkg3)
+    [foo](https://godoc.org/github.com/user/repo/pkg4)
+    <https://go.pkgdoc.org/github.com/user/repo/pkg5>
+    [foo](https://godoc.org/github.com/user/repo/pkg6#Export)
+    https://gowalker.org/github.com/user/repo/pkg7
     Build Status: [![Build Status](https://drone.io/github.com/user/repo1/status.png)](https://drone.io/github.com/user/repo1/latest)
     'go get example.org/package1' will install package1.
-    (http://go.pkgdoc.org/example.org/package2 "Package2's documentation on GoPkgDoc").
+    (https://go.pkgdoc.org/example.org/package2 "Package2's documentation on GoPkgDoc").
     import "example.org/package3"
 `
 
